@@ -1,0 +1,1 @@
+export { AutomationModule } from './AutomationModule';

@@ -1,0 +1,1 @@
+export { CoworkModule } from './CoworkModule';

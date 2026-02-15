@@ -1,0 +1,1 @@
+export { BrowserModule } from './BrowserModule';

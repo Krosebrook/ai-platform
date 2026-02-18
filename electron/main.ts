@@ -162,10 +162,14 @@ ipcMain.handle('check-status', async (_e, statusUrl: string) => {
 // ─── Audit IPC ───
 ipcMain.handle('audit-search-pattern', async (_e, repoPath: string, patterns: string[], exactMatch: boolean = false) => {
   try {
-    // Validate repo path
-    const normalizedPath = path.normalize(repoPath);
-    if (!path.isAbsolute(normalizedPath) && !normalizedPath.startsWith('.')) {
-      return { success: false, found: false, files: [], error: 'Invalid repository path' };
+    // Validate and resolve repo path
+    const resolvedPath = path.resolve(repoPath);
+    const homePath = app.getPath('home');
+    
+    // Ensure the path is within user's home directory or is absolute
+    // This prevents access to system directories
+    if (!resolvedPath.startsWith(homePath)) {
+      return { success: false, found: false, files: [], error: 'Access denied: Path must be within home directory' };
     }
 
     // Recursively find files
@@ -208,7 +212,7 @@ ipcMain.handle('audit-search-pattern', async (_e, repoPath: string, patterns: st
       }
     }
     
-    await searchDir(normalizedPath);
+    await searchDir(resolvedPath);
     const found = foundFiles.length > 0;
     return { success: true, found, files: foundFiles };
   } catch (error: any) {
@@ -218,13 +222,21 @@ ipcMain.handle('audit-search-pattern', async (_e, repoPath: string, patterns: st
 
 ipcMain.handle('audit-check-file-exists', async (_e, repoPath: string, filename: string) => {
   try {
-    // Validate paths
-    const normalizedRepo = path.normalize(repoPath);
-    const normalizedFilename = path.normalize(filename);
+    // Validate and resolve paths
+    const resolvedRepo = path.resolve(repoPath);
+    const homePath = app.getPath('home');
     
-    // Prevent path traversal
-    const fullPath = path.join(normalizedRepo, normalizedFilename);
-    if (!fullPath.startsWith(normalizedRepo)) {
+    // Ensure repo path is within user's home directory
+    if (!resolvedRepo.startsWith(homePath)) {
+      return { success: false, exists: false, error: 'Access denied' };
+    }
+    
+    // Resolve the full file path and check for traversal
+    const fullPath = path.resolve(resolvedRepo, filename);
+    const relativePath = path.relative(resolvedRepo, fullPath);
+    
+    // If relative path starts with '..' or is absolute, it's a traversal attempt
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
       return { success: false, exists: false, error: 'Invalid path' };
     }
     
@@ -237,13 +249,21 @@ ipcMain.handle('audit-check-file-exists', async (_e, repoPath: string, filename:
 
 ipcMain.handle('audit-check-file-contains', async (_e, repoPath: string, filename: string, pattern: string) => {
   try {
-    // Validate paths
-    const normalizedRepo = path.normalize(repoPath);
-    const normalizedFilename = path.normalize(filename);
+    // Validate and resolve paths
+    const resolvedRepo = path.resolve(repoPath);
+    const homePath = app.getPath('home');
     
-    // Prevent path traversal
-    const fullPath = path.join(normalizedRepo, normalizedFilename);
-    if (!fullPath.startsWith(normalizedRepo)) {
+    // Ensure repo path is within user's home directory
+    if (!resolvedRepo.startsWith(homePath)) {
+      return { success: false, contains: false, error: 'Access denied' };
+    }
+    
+    // Resolve the full file path and check for traversal
+    const fullPath = path.resolve(resolvedRepo, filename);
+    const relativePath = path.relative(resolvedRepo, fullPath);
+    
+    // If relative path starts with '..' or is absolute, it's a traversal attempt
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
       return { success: false, contains: false, error: 'Invalid path' };
     }
     
@@ -257,10 +277,13 @@ ipcMain.handle('audit-check-file-contains', async (_e, repoPath: string, filenam
 
 ipcMain.handle('audit-list-files', async (_e, repoPath: string, pattern: string = '*') => {
   try {
-    // Validate repo path
-    const normalizedPath = path.normalize(repoPath);
-    if (!path.isAbsolute(normalizedPath) && !normalizedPath.startsWith('.')) {
-      return { success: false, files: [], error: 'Invalid repository path' };
+    // Validate and resolve repo path
+    const resolvedPath = path.resolve(repoPath);
+    const homePath = app.getPath('home');
+    
+    // Ensure the path is within user's home directory
+    if (!resolvedPath.startsWith(homePath)) {
+      return { success: false, files: [], error: 'Access denied: Path must be within home directory' };
     }
     
     // Recursively list files
@@ -290,7 +313,7 @@ ipcMain.handle('audit-list-files', async (_e, repoPath: string, pattern: string 
       }
     }
     
-    await listDir(normalizedPath);
+    await listDir(resolvedPath);
     return { success: true, files };
   } catch (error: any) {
     return { success: false, files: [], error: error.message };

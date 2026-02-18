@@ -821,11 +821,9 @@ export class AuditService {
     }
     
     // Data safety for PII
-    if (input.handlesPII) {
-      const dataScore = categories.find(c => c.category.includes('Data'))?.score || 0;
-      if (dataScore < 3) {
-        securityConcerns.push('CRITICAL: Handles PII without adequate protection measures');
-      }
+    const dataScore = categories.find(c => c.category.includes('Data'))?.score || 0;
+    if (input.handlesPII && dataScore < 3) {
+      securityConcerns.push('CRITICAL: Handles PII without adequate protection measures');
     }
     
     // Observability
@@ -835,7 +833,6 @@ export class AuditService {
       : totalScore < 30
       ? 'Lack of resilience - will crash under error conditions or high load.'
       : 'Should handle normal operations but may struggle under stress.';
-    const dataScore = categories.find(c => c.category.includes('Data'))?.score || 0;
     
     return {
       safeForEmployees: totalScore >= 30 && identityScore >= 3,

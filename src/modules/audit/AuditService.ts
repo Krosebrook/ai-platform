@@ -1,4 +1,5 @@
 import type { AuditInput, AuditResult, CategoryScore } from './types';
+import { AuditFS } from './AuditFS';
 
 export class AuditService {
   /**
@@ -875,19 +876,14 @@ export class AuditService {
   
   // Helper methods for file system checks
   private static async checkFileExists(repoPath: string, filename: string): Promise<boolean> {
-    // This is a simplified version - in real implementation would use fs
-    // For now, returning false to simulate checks
-    return false;
+    return AuditFS.checkFileExists(repoPath, filename);
   }
   
   private static async checkFileContains(repoPath: string, filename: string, pattern: string): Promise<boolean> {
-    // Simplified - would read file and check for pattern
-    return false;
+    return AuditFS.checkFileContains(repoPath, filename, pattern);
   }
   
   private static async checkForPattern(repoPath: string, patterns: string[], exact: boolean = false): Promise<boolean> {
-    // Simplified - would use grep or similar to search codebase
-    // In real implementation, this would scan the repository
-    return false;
+    return AuditFS.checkForPattern(repoPath, patterns, exact);
   }
 }

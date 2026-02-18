@@ -28,6 +28,16 @@ contextBridge.exposeInMainWorld('electron', {
   // Platform
   getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
 
+  // Audit
+  auditSearchPattern: (repoPath: string, patterns: string[], exactMatch?: boolean) =>
+    ipcRenderer.invoke('audit-search-pattern', repoPath, patterns, exactMatch),
+  auditCheckFileExists: (repoPath: string, filename: string) =>
+    ipcRenderer.invoke('audit-check-file-exists', repoPath, filename),
+  auditCheckFileContains: (repoPath: string, filename: string, pattern: string) =>
+    ipcRenderer.invoke('audit-check-file-contains', repoPath, filename, pattern),
+  auditListFiles: (repoPath: string, pattern?: string) =>
+    ipcRenderer.invoke('audit-list-files', repoPath, pattern),
+
   // Events from main process
   onToggleCommandPalette: (callback: () => void) => {
     ipcRenderer.on('toggle-command-palette', callback);
@@ -52,6 +62,10 @@ declare global {
       triggerWorkflow: (webhookUrl: string, payload: any) => Promise<{ success: boolean; data?: any; error?: string }>;
       checkStatus: (statusUrl: string) => Promise<{ success: boolean; data?: any; error?: string }>;
       getPlatformInfo: () => Promise<{ platform: string; isElectron: boolean; appPath: string; homePath: string }>;
+      auditSearchPattern: (repoPath: string, patterns: string[], exactMatch?: boolean) => Promise<{ success: boolean; found: boolean; files?: string[] }>;
+      auditCheckFileExists: (repoPath: string, filename: string) => Promise<{ success: boolean; exists: boolean }>;
+      auditCheckFileContains: (repoPath: string, filename: string, pattern: string) => Promise<{ success: boolean; contains: boolean; error?: string }>;
+      auditListFiles: (repoPath: string, pattern?: string) => Promise<{ success: boolean; files: string[]; error?: string }>;
       onToggleCommandPalette: (callback: () => void) => () => void;
     };
   }

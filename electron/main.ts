@@ -159,6 +159,167 @@ ipcMain.handle('check-status', async (_e, statusUrl: string) => {
   }
 });
 
+// ─── Audit IPC ───
+ipcMain.handle('audit-search-pattern', async (_e, repoPath: string, patterns: string[], exactMatch: boolean = false) => {
+  try {
+    // Validate and resolve repo path
+    const resolvedPath = path.resolve(repoPath);
+    const homePath = app.getPath('home');
+    
+    // Ensure the path is within user's home directory or is absolute
+    // This prevents access to system directories
+    if (!resolvedPath.startsWith(homePath)) {
+      return { success: false, found: false, files: [], error: 'Access denied: Path must be within home directory' };
+    }
+
+    // Recursively find files
+    const foundFiles: string[] = [];
+    const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage'];
+    
+    async function searchDir(dir: string) {
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          if (excludeDirs.includes(entry.name)) continue;
+          
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            await searchDir(fullPath);
+          } else if (entry.isFile()) {
+            try {
+              const content = await fs.promises.readFile(fullPath, 'utf-8');
+              
+              let matches = false;
+              if (exactMatch && patterns.length > 0) {
+                matches = content.includes(patterns[0]);
+              } else {
+                const lowerContent = content.toLowerCase();
+                matches = patterns.some(p => lowerContent.includes(p.toLowerCase()));
+              }
+              
+              if (matches) {
+                foundFiles.push(fullPath);
+              }
+            } catch {
+              // Skip files that can't be read (binary, permission issues, etc.)
+            }
+          }
+        }
+      } catch {
+        // Skip directories that can't be accessed
+      }
+    }
+    
+    await searchDir(resolvedPath);
+    const found = foundFiles.length > 0;
+    return { success: true, found, files: foundFiles };
+  } catch (error: any) {
+    return { success: false, found: false, files: [], error: error.message };
+  }
+});
+
+ipcMain.handle('audit-check-file-exists', async (_e, repoPath: string, filename: string) => {
+  try {
+    // Validate and resolve paths
+    const resolvedRepo = path.resolve(repoPath);
+    const homePath = app.getPath('home');
+    
+    // Ensure repo path is within user's home directory
+    if (!resolvedRepo.startsWith(homePath)) {
+      return { success: false, exists: false, error: 'Access denied' };
+    }
+    
+    // Resolve the full file path and check for traversal
+    const fullPath = path.resolve(resolvedRepo, filename);
+    const relativePath = path.relative(resolvedRepo, fullPath);
+    
+    // If relative path starts with '..' or is absolute, it's a traversal attempt
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      return { success: false, exists: false, error: 'Invalid path' };
+    }
+    
+    await fs.promises.access(fullPath);
+    return { success: true, exists: true };
+  } catch {
+    return { success: true, exists: false };
+  }
+});
+
+ipcMain.handle('audit-check-file-contains', async (_e, repoPath: string, filename: string, pattern: string) => {
+  try {
+    // Validate and resolve paths
+    const resolvedRepo = path.resolve(repoPath);
+    const homePath = app.getPath('home');
+    
+    // Ensure repo path is within user's home directory
+    if (!resolvedRepo.startsWith(homePath)) {
+      return { success: false, contains: false, error: 'Access denied' };
+    }
+    
+    // Resolve the full file path and check for traversal
+    const fullPath = path.resolve(resolvedRepo, filename);
+    const relativePath = path.relative(resolvedRepo, fullPath);
+    
+    // If relative path starts with '..' or is absolute, it's a traversal attempt
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      return { success: false, contains: false, error: 'Invalid path' };
+    }
+    
+    const content = await fs.promises.readFile(fullPath, 'utf-8');
+    const contains = content.includes(pattern);
+    return { success: true, contains };
+  } catch (error: any) {
+    return { success: false, contains: false, error: error.message };
+  }
+});
+
+ipcMain.handle('audit-list-files', async (_e, repoPath: string, pattern: string = '*') => {
+  try {
+    // Validate and resolve repo path
+    const resolvedPath = path.resolve(repoPath);
+    const homePath = app.getPath('home');
+    
+    // Ensure the path is within user's home directory
+    if (!resolvedPath.startsWith(homePath)) {
+      return { success: false, files: [], error: 'Access denied: Path must be within home directory' };
+    }
+    
+    // Recursively list files
+    const files: string[] = [];
+    const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage'];
+    
+    async function listDir(dir: string) {
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          if (excludeDirs.includes(entry.name)) continue;
+          
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            await listDir(fullPath);
+          } else if (entry.isFile()) {
+            // Simple pattern matching (matches * wildcard or exact substring)
+            if (pattern === '*' || entry.name.includes(pattern.replace(/\*/g, ''))) {
+              files.push(fullPath);
+            }
+          }
+        }
+      } catch {
+        // Skip directories that can't be accessed
+      }
+    }
+    
+    await listDir(resolvedPath);
+    return { success: true, files };
+  } catch (error: any) {
+    return { success: false, files: [], error: error.message };
+  }
+});
+
 // ─── Platform Info IPC ───
 ipcMain.handle('get-platform-info', () => ({
   platform: process.platform,

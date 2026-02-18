@@ -302,8 +302,8 @@ ipcMain.handle('audit-list-files', async (_e, repoPath: string, pattern: string 
           if (entry.isDirectory()) {
             await listDir(fullPath);
           } else if (entry.isFile()) {
-            // Simple pattern matching (just check if filename contains pattern or matches *)
-            if (pattern === '*' || entry.name.includes(pattern.replace('*', ''))) {
+            // Simple pattern matching (matches * wildcard or exact substring)
+            if (pattern === '*' || entry.name.includes(pattern.replace(/\*/g, ''))) {
               files.push(fullPath);
             }
           }

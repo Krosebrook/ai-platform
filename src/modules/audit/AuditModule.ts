@@ -82,10 +82,19 @@ export class AuditModule implements AssistantModule {
     // Extract repository URL/path
     const urlMatch = raw.match(/https?:\/\/[^\s]+/);
     if (urlMatch) {
-      if (urlMatch[0].includes('github.com') || urlMatch[0].includes('gitlab.com')) {
-        input.repositoryUrl = urlMatch[0];
-      } else {
-        input.deploymentUrl = urlMatch[0];
+      try {
+        const url = new URL(urlMatch[0]);
+        // Check if it's a git hosting platform by hostname
+        if (url.hostname === 'github.com' || 
+            url.hostname === 'gitlab.com' ||
+            url.hostname === 'www.github.com' ||
+            url.hostname === 'www.gitlab.com') {
+          input.repositoryUrl = urlMatch[0];
+        } else {
+          input.deploymentUrl = urlMatch[0];
+        }
+      } catch {
+        // Invalid URL, skip
       }
     }
 

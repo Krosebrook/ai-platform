@@ -25,6 +25,7 @@ import { CalendarModule } from './modules/calendar';
 import { DataModule } from './modules/data';
 import { AutomationModule } from './modules/automation';
 import { EmailModule } from './modules/email';
+import { AuditModule } from './modules/audit';
 
 function App() {
   const [ready, setReady] = useState(false);
@@ -57,6 +58,7 @@ function App() {
         new DataModule(),
         new AutomationModule(),
         new EmailModule(),
+        new AuditModule(),
       ];
 
       for (const mod of modules) {

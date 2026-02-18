@@ -162,34 +162,72 @@ ipcMain.handle('check-status', async (_e, statusUrl: string) => {
 // ─── Audit IPC ───
 ipcMain.handle('audit-search-pattern', async (_e, repoPath: string, patterns: string[], exactMatch: boolean = false) => {
   try {
-    // Use grep or ripgrep if available, fallback to basic search
-    const searchPatterns = patterns.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-    let command = '';
+    // Validate repo path
+    const normalizedPath = path.normalize(repoPath);
+    if (!path.isAbsolute(normalizedPath) && !normalizedPath.startsWith('.')) {
+      return { success: false, found: false, files: [], error: 'Invalid repository path' };
+    }
+
+    // Recursively find files
+    const foundFiles: string[] = [];
+    const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage'];
     
-    // Try ripgrep first (faster)
-    try {
-      execSync('which rg', { stdio: 'ignore' });
-      command = exactMatch 
-        ? `rg -l -F "${patterns[0]}" "${repoPath}" 2>/dev/null || true`
-        : `rg -l -i "${searchPatterns}" "${repoPath}" 2>/dev/null || true`;
-    } catch {
-      // Fallback to grep
-      command = exactMatch
-        ? `grep -r -l -F "${patterns[0]}" "${repoPath}" 2>/dev/null || true`
-        : `grep -r -l -i -E "${searchPatterns}" "${repoPath}" 2>/dev/null || true`;
+    async function searchDir(dir: string) {
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          if (excludeDirs.includes(entry.name)) continue;
+          
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            await searchDir(fullPath);
+          } else if (entry.isFile()) {
+            try {
+              const content = await fs.promises.readFile(fullPath, 'utf-8');
+              
+              let matches = false;
+              if (exactMatch && patterns.length > 0) {
+                matches = content.includes(patterns[0]);
+              } else {
+                const lowerContent = content.toLowerCase();
+                matches = patterns.some(p => lowerContent.includes(p.toLowerCase()));
+              }
+              
+              if (matches) {
+                foundFiles.push(fullPath);
+              }
+            } catch {
+              // Skip files that can't be read (binary, permission issues, etc.)
+            }
+          }
+        }
+      } catch {
+        // Skip directories that can't be accessed
+      }
     }
     
-    const result = execSync(command, { maxBuffer: 10 * 1024 * 1024 }).toString();
-    const found = result.trim().length > 0;
-    return { success: true, found, files: found ? result.trim().split('\n') : [] };
+    await searchDir(normalizedPath);
+    const found = foundFiles.length > 0;
+    return { success: true, found, files: foundFiles };
   } catch (error: any) {
-    return { success: true, found: false, files: [] };
+    return { success: false, found: false, files: [], error: error.message };
   }
 });
 
 ipcMain.handle('audit-check-file-exists', async (_e, repoPath: string, filename: string) => {
   try {
-    const fullPath = path.join(repoPath, filename);
+    // Validate paths
+    const normalizedRepo = path.normalize(repoPath);
+    const normalizedFilename = path.normalize(filename);
+    
+    // Prevent path traversal
+    const fullPath = path.join(normalizedRepo, normalizedFilename);
+    if (!fullPath.startsWith(normalizedRepo)) {
+      return { success: false, exists: false, error: 'Invalid path' };
+    }
+    
     await fs.promises.access(fullPath);
     return { success: true, exists: true };
   } catch {
@@ -199,7 +237,16 @@ ipcMain.handle('audit-check-file-exists', async (_e, repoPath: string, filename:
 
 ipcMain.handle('audit-check-file-contains', async (_e, repoPath: string, filename: string, pattern: string) => {
   try {
-    const fullPath = path.join(repoPath, filename);
+    // Validate paths
+    const normalizedRepo = path.normalize(repoPath);
+    const normalizedFilename = path.normalize(filename);
+    
+    // Prevent path traversal
+    const fullPath = path.join(normalizedRepo, normalizedFilename);
+    if (!fullPath.startsWith(normalizedRepo)) {
+      return { success: false, contains: false, error: 'Invalid path' };
+    }
+    
     const content = await fs.promises.readFile(fullPath, 'utf-8');
     const contains = content.includes(pattern);
     return { success: true, contains };
@@ -210,9 +257,40 @@ ipcMain.handle('audit-check-file-contains', async (_e, repoPath: string, filenam
 
 ipcMain.handle('audit-list-files', async (_e, repoPath: string, pattern: string = '*') => {
   try {
-    const command = `find "${repoPath}" -type f -name "${pattern}" 2>/dev/null || true`;
-    const result = execSync(command, { maxBuffer: 10 * 1024 * 1024 }).toString();
-    const files = result.trim().split('\n').filter(f => f.length > 0);
+    // Validate repo path
+    const normalizedPath = path.normalize(repoPath);
+    if (!path.isAbsolute(normalizedPath) && !normalizedPath.startsWith('.')) {
+      return { success: false, files: [], error: 'Invalid repository path' };
+    }
+    
+    // Recursively list files
+    const files: string[] = [];
+    const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage'];
+    
+    async function listDir(dir: string) {
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          if (excludeDirs.includes(entry.name)) continue;
+          
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            await listDir(fullPath);
+          } else if (entry.isFile()) {
+            // Simple pattern matching (just check if filename contains pattern or matches *)
+            if (pattern === '*' || entry.name.includes(pattern.replace('*', ''))) {
+              files.push(fullPath);
+            }
+          }
+        }
+      } catch {
+        // Skip directories that can't be accessed
+      }
+    }
+    
+    await listDir(normalizedPath);
     return { success: true, files };
   } catch (error: any) {
     return { success: false, files: [], error: error.message };

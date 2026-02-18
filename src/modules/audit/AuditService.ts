@@ -685,6 +685,32 @@ export class AuditService {
     const findings: string[] = [];
     
     try {
+      // Validate URL to prevent SSRF
+      let url: URL;
+      try {
+        url = new URL(deploymentUrl);
+      } catch {
+        findings.push('❌ Invalid deployment URL');
+        return { findings };
+      }
+      
+      // Only allow http/https protocols
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        findings.push('❌ Invalid URL protocol (only http/https allowed)');
+        return { findings };
+      }
+      
+      // Prevent access to internal networks (basic check)
+      const hostname = url.hostname.toLowerCase();
+      if (hostname === 'localhost' || 
+          hostname === '127.0.0.1' || 
+          hostname.startsWith('192.168.') ||
+          hostname.startsWith('10.') ||
+          hostname.startsWith('172.16.') ||
+          hostname === '::1') {
+        findings.push('⚠️  Warning: Deployment URL points to internal network');
+      }
+      
       const startTime = Date.now();
       const response = await fetch(deploymentUrl, {
         method: 'GET',
@@ -809,10 +835,11 @@ export class AuditService {
       : totalScore < 30
       ? 'Lack of resilience - will crash under error conditions or high load.'
       : 'Should handle normal operations but may struggle under stress.';
+    const dataScore = categories.find(c => c.category.includes('Data'))?.score || 0;
     
     return {
       safeForEmployees: totalScore >= 30 && identityScore >= 3,
-      safeForCustomers: totalScore >= 38 && identityScore >= 4 && (input.handlesPII ? categories.find(c => c.category.includes('Data'))?.score! >= 4 : true),
+      safeForCustomers: totalScore >= 38 && identityScore >= 4 && (!input.handlesPII || dataScore >= 4),
       firstFailurePoint,
       securityConcerns,
     };

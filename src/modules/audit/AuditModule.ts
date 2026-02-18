@@ -230,13 +230,13 @@ export class AuditModule implements AssistantModule {
     switch (name) {
       case 'audit.run': {
         const input: AuditInput = {
-          repositoryPath: args.repositoryPath as string,
-          repositoryUrl: args.repositoryUrl as string,
-          deploymentUrl: args.deploymentUrl as string,
+          repositoryPath: (args.repositoryPath as string) || '.',
+          repositoryUrl: args.repositoryUrl as string | undefined,
+          deploymentUrl: args.deploymentUrl as string | undefined,
           audience: (args.audience as 'employee' | 'public' | 'both') || 'employee',
-          handlesPII: args.handlesPII as boolean || false,
-          handlesPayments: args.handlesPayments as boolean || false,
-          handlesSecrets: args.handlesSecrets as boolean || false,
+          handlesPII: Boolean(args.handlesPII),
+          handlesPayments: Boolean(args.handlesPayments),
+          handlesSecrets: Boolean(args.handlesSecrets),
         };
         const result = await AuditService.audit(input);
         this.currentAudit = result;
